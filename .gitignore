@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+pytest-cache-files-*/
+travel_agent.db
+.env
+*.log
+data/pending_threads.json
+data/user_memory.json
+data/ws_sessions.json
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/tsconfig.tsbuildinfo

@@ -1,0 +1,6 @@
+langchain
+langchain-openai
+zhipuai
+httpx-sse
+chromadb
+faiss-cpu

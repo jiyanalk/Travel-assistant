@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import json
+from typing import Any
 
 from app.config import ROOT_DIR
-from schemas.trip_request import TripRequest
 from schemas.user_profile import UserProfile
 
 
@@ -17,21 +19,37 @@ def load_user_profile(user_id: str) -> UserProfile | None:
     return UserProfile.model_validate(raw_profile)
 
 
-def save_user_preferences(user_id: str, request: TripRequest) -> None:
-    payload = _load_profiles()
+def save_user_preferences(user_id: str, preferences: dict[str, Any]) -> None:
+    """Persist stable user preferences only.
 
+    Temporary trip fields such as destination, days, people, and budget are not
+    written here. Session-level state lives in ws_session_manager instead.
+    """
+
+    payload = _load_profiles()
     profile = payload.get(user_id, {"user_id": user_id})
-    if request.origin:
-        profile["home_city"] = request.origin
-    if request.destination:
-        history = set(profile.get("history_destinations", []))
-        history.add(request.destination)
-        profile["history_destinations"] = sorted(history)
-    if request.interests:
-        profile["interests"] = request.interests
-    profile["pace_preference"] = request.pace
-    if request.budget:
-        profile["budget_preference"] = f"{int(request.budget.amount)} {request.budget.currency}"
+
+    interests = preferences.get("interests")
+    if isinstance(interests, list):
+        profile["interests"] = [item for item in interests if isinstance(item, str)]
+
+    food_preferences = preferences.get("food_preferences")
+    if isinstance(food_preferences, list):
+        profile["food_preferences"] = [
+            item for item in food_preferences if isinstance(item, str)
+        ]
+
+    disliked_tags = preferences.get("disliked_tags")
+    if isinstance(disliked_tags, list):
+        profile["disliked_tags"] = [item for item in disliked_tags if isinstance(item, str)]
+
+    pace_preference = preferences.get("pace_preference")
+    if isinstance(pace_preference, str):
+        profile["pace_preference"] = pace_preference
+
+    home_city = preferences.get("home_city")
+    if isinstance(home_city, str):
+        profile["home_city"] = home_city
 
     payload[user_id] = profile
     _write_profiles(payload)

@@ -1,36 +1,41 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ConversationMessage,
   getTripWebSocketUrl,
-  TripPlan,
-  TripPlanResponse,
-  TripRequestSnapshot,
   WSClientMessage,
-  WSServerMessage,
-  WSSessionSnapshot,
 } from "../lib/api";
 
-const defaultMessage = "";
-
 type ConnectionStatus = "idle" | "connecting" | "connected" | "reconnecting" | "closed";
+type JsonObject = Record<string, unknown>;
+type AnyServerMessage = {
+  type: string;
+  payload?: unknown;
+  session_id?: string;
+  message?: string;
+  request?: JsonObject | null;
+  plan?: JsonObject | null;
+  metadata?: JsonObject | null;
+};
 
-export function TripPlanner() {
-  const [message, setMessage] = useState(defaultMessage);
+export function TravelChatApp() {
+  const [message, setMessage] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
-  const [tripPlan, setTripPlan] = useState<TripPlan | null>(null);
-  const [tripRequest, setTripRequest] = useState<TripRequestSnapshot | null>(null);
-  const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(null);
+  const [request, setRequest] = useState<JsonObject | null>(null);
+  const [plan, setPlan] = useState<JsonObject | null>(null);
+  const [metadata, setMetadata] = useState<JsonObject | null>(null);
   const [agentSteps, setAgentSteps] = useState<string[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+
+  const budgetSummary = useMemo(() => findBudgetSummary(plan), [plan]);
 
   useEffect(() => {
     const nextSessionId = createSessionId();
@@ -59,9 +64,10 @@ export function TripPlanner() {
 
       socket.onmessage = (event) => {
         try {
-          handleServerMessage(JSON.parse(event.data) as WSServerMessage);
+          handleServerMessage(JSON.parse(event.data) as AnyServerMessage);
         } catch {
           setError("后端返回了无法解析的 WebSocket 消息。");
+          setBusy(false);
         }
       };
 
@@ -93,78 +99,96 @@ export function TripPlanner() {
     };
   }, [sessionId]);
 
-  function handleServerMessage(serverMessage: WSServerMessage) {
+  function handleServerMessage(serverMessage: AnyServerMessage) {
     switch (serverMessage.type) {
       case "connected":
       case "snapshot":
-        applySnapshot(serverMessage.payload as WSSessionSnapshot);
+        applySnapshot(asObject(serverMessage.payload));
         return;
       case "step_start": {
-        const payload = serverMessage.payload as { step?: string } | undefined;
-        if (payload?.step) {
-          setAgentSteps((current) =>
-            current.includes(payload.step as string) ? current : [...current, payload.step as string],
-          );
+        const payload = asObject(serverMessage.payload);
+        const step = typeof payload?.step === "string" ? payload.step : null;
+        if (step) {
+          setAgentSteps((current) => (current.includes(step) ? current : [...current, step]));
         }
         return;
       }
       case "plan_result":
-        applyPlanResponse(serverMessage.payload as TripPlanResponse);
+        applyLegacyPlanResponse(asObject(serverMessage.payload));
         setBusy(false);
         return;
       case "plan_revised": {
-        const payload = serverMessage.payload as
-          | { trip_plan?: TripPlan }
-          | undefined;
-        if (payload?.trip_plan) {
-          setTripPlan(payload.trip_plan);
-          setClarificationQuestion(null);
+        const payload = asObject(serverMessage.payload);
+        const revisedPlan = asObject(payload?.trip_plan);
+        if (revisedPlan) {
+          setPlan(revisedPlan);
         }
         setBusy(false);
         return;
       }
-      case "assistant_message": {
-        const payload = serverMessage.payload as { message?: string } | undefined;
-        if (payload?.message) {
-          setMessages((current) => [...current, { role: "assistant", content: payload.message as string }]);
-        }
+      case "assistant_message":
+        applyAssistantMessage(serverMessage);
         setBusy(false);
         return;
-      }
-      case "error": {
-        const payload = serverMessage.payload as { message?: string } | undefined;
-        setError(payload?.message || "后端处理失败。");
+      case "error":
+        setError(readErrorMessage(serverMessage));
         setBusy(false);
         return;
-      }
       default:
         return;
     }
   }
 
-  function applySnapshot(snapshot: WSSessionSnapshot) {
-    setThreadId(snapshot.thread_id ?? null);
-    setTripId(snapshot.trip_id ?? null);
-    setTripPlan(snapshot.latest_trip_plan ?? snapshot.last_plan_response?.trip_plan ?? null);
-    setTripRequest(snapshot.last_plan_response?.trip_request ?? null);
-    setAgentSteps(snapshot.last_plan_response?.agent_steps ?? []);
-    setMessages(snapshot.message_history ?? []);
-    setClarificationQuestion(
-      snapshot.last_plan_response?.need_clarification
-        ? snapshot.last_plan_response.clarification_question ?? null
-        : null,
-    );
+  function applyAssistantMessage(serverMessage: AnyServerMessage) {
+    const payload = asObject(serverMessage.payload);
+    const assistantText = serverMessage.message ?? readString(payload?.message);
+    const nextRequest = asObject(serverMessage.request) ?? asObject(payload?.request);
+    const nextPlan = asObject(serverMessage.plan) ?? asObject(payload?.plan);
+    const nextMetadata = asObject(serverMessage.metadata) ?? asObject(payload?.metadata);
+
+    if (assistantText) {
+      setMessages((current) => [...current, { role: "assistant", content: assistantText }]);
+    }
+    if (nextRequest) {
+      setRequest(nextRequest);
+    }
+    if (nextPlan) {
+      setPlan(nextPlan);
+    }
+    if (nextMetadata) {
+      setMetadata(nextMetadata);
+    }
   }
 
-  function applyPlanResponse(response: TripPlanResponse) {
-    setThreadId(response.thread_id ?? null);
-    setTripId(response.trip_id ?? null);
-    setTripRequest(response.trip_request ?? null);
-    setAgentSteps(response.agent_steps);
-    setClarificationQuestion(
-      response.need_clarification ? response.clarification_question ?? null : null,
-    );
-    setTripPlan(response.trip_plan ?? null);
+  function applySnapshot(snapshot: JsonObject | null) {
+    if (!snapshot) {
+      return;
+    }
+
+    setThreadId(readString(snapshot.thread_id));
+    setTripId(readString(snapshot.trip_id));
+
+    const latestRequest = asObject(snapshot.latest_request) ?? asObject(snapshot.light_latest_request);
+    const latestPlan = asObject(snapshot.latest_plan) ?? asObject(snapshot.light_latest_plan);
+
+    setRequest(latestRequest);
+    setPlan(latestPlan);
+    setAgentSteps([]);
+
+    const history = readConversation(snapshot.message_history);
+    const lightHistory = readConversation(snapshot.light_message_history);
+    setMessages(history.length > 0 ? history : lightHistory);
+  }
+
+  function applyLegacyPlanResponse(response: JsonObject | null) {
+    if (!response) {
+      return;
+    }
+    setThreadId(readString(response.thread_id));
+    setTripId(readString(response.trip_id));
+    setRequest(asObject(response.trip_request));
+    setPlan(asObject(response.trip_plan));
+    setAgentSteps(readStringArray(response.agent_steps));
   }
 
   function sendSocketMessage(payload: WSClientMessage) {
@@ -181,16 +205,11 @@ export function TripPlanner() {
     event.preventDefault();
     const trimmed = message.trim();
     if (!trimmed) {
-      setError("请输入旅行需求或补充说明。");
+      setError("请输入旅行需求或继续追问。");
       return;
     }
 
-    const payload: WSClientMessage =
-      tripPlan && !clarificationQuestion
-        ? { type: "revise_plan", message: trimmed }
-        : { type: "user_message", message: trimmed };
-
-    if (!sendSocketMessage(payload)) {
+    if (!sendSocketMessage({ type: "user_message", message: trimmed })) {
       return;
     }
 
@@ -205,8 +224,10 @@ export function TripPlanner() {
       <div className="page-grid">
         <section className="panel panel-light">
           <div className="connection-row">
-            <p className="eyebrow">Travel Planning Agent</p>
-            <span className={`status-pill status-${connectionStatus}`}>{connectionStatusLabel(connectionStatus)}</span>
+            <p className="eyebrow">Travel Assistant</p>
+            <span className={`status-pill status-${connectionStatus}`}>
+              {connectionStatusLabel(connectionStatus)}
+            </span>
           </div>
 
           <div className="conversation-panel">
@@ -218,7 +239,7 @@ export function TripPlanner() {
                 </article>
               ))
             ) : (
-              <div className="conversation-empty">新的会话会在这里保留上下文。</div>
+              <div className="conversation-empty">新的对话会在这里保留上下文。</div>
             )}
           </div>
 
@@ -231,27 +252,14 @@ export function TripPlanner() {
               placeholder="输入旅行需求，或继续追问并调整行程"
             />
             <button className="primary-button" type="submit" disabled={busy || connectionStatus !== "connected"}>
-              {busy ? "Agent 处理中..." : submitLabel(Boolean(tripPlan), Boolean(clarificationQuestion))}
+              {busy ? "Agent 处理中..." : "发送"}
             </button>
           </form>
-
-          {tripRequest ? (
-            <div className="callout">
-              <h3>当前解析到的旅行需求</h3>
-              <pre>{JSON.stringify(tripRequest, null, 2)}</pre>
-            </div>
-          ) : null}
-
-          {clarificationQuestion ? (
-            <div className="callout">
-              <h3>需要补充的信息</h3>
-              <pre>{clarificationQuestion}</pre>
-            </div>
-          ) : null}
 
           <div className="session-meta">
             <span>session: {sessionId ?? "建立中"}</span>
             {threadId ? <span>thread: {threadId}</span> : null}
+            {tripId ? <span>trip: {tripId}</span> : null}
           </div>
 
           {error ? <div className="error-box">{error}</div> : null}
@@ -260,171 +268,209 @@ export function TripPlanner() {
         <section className="panel panel-dark">
           <div className="result-header">
             <div>
-              <p className="subtle-tag">Agent Trace</p>
-              <h2>执行轨迹与模型调试输出</h2>
+              <p className="subtle-tag">Current State</p>
+              <h2>旅行需求与轻量行程草案</h2>
             </div>
-            {tripId ? <span className="chip">trip_id: {tripId}</span> : null}
           </div>
 
-          <div className="steps-list">
-            {agentSteps.length > 0 ? (
-              agentSteps.map((step, index) => (
-                <div key={`${step}-${index}`} className="step-card">
-                  {step}
-                </div>
-              ))
-            ) : (
-              <div className="empty-box">发送一次需求后，这里会实时显示 Agent 节点推进。</div>
-            )}
+          <StateCard title="当前解析出的旅行需求" value={request} emptyText="还没有解析到旅行需求。" />
+
+          <div className="result-block">
+            <p className="subtle-tag">Plan</p>
+            <h3>当前轻量行程草案</h3>
+            {plan ? <PlanView plan={plan} /> : <p className="muted-line">还没有生成行程草案。</p>}
           </div>
 
-          {tripPlan ? <TripPlanView tripPlan={tripPlan} /> : <EmptyPlanState />}
+          {budgetSummary ? (
+            <div className="result-block">
+              <p className="subtle-tag">Budget</p>
+              <h3>预算摘要</h3>
+              <p>{budgetSummary}</p>
+            </div>
+          ) : null}
+
+          {agentSteps.length > 0 ? (
+            <details className="result-block">
+              <summary>旧 Agent 执行轨迹</summary>
+              <div className="steps-list">
+                {agentSteps.map((step, index) => (
+                  <div key={`${step}-${index}`} className="step-card">
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+
+          <details className="result-block">
+            <summary>Dev metadata</summary>
+            <pre>{JSON.stringify(metadata ?? {}, null, 2)}</pre>
+          </details>
         </section>
       </div>
     </main>
   );
 }
 
-function EmptyPlanState() {
+function StateCard({
+  title,
+  value,
+  emptyText,
+}: {
+  title: string;
+  value: JsonObject | null;
+  emptyText: string;
+}) {
   return (
-    <div className="empty-plan">
-      <h3>还没有生成结果</h3>
-      <p>先发起一次会话，后端返回的 TripPlan 会在这里实时渲染。</p>
+    <div className="result-block">
+      <p className="subtle-tag">Request</p>
+      <h3>{title}</h3>
+      {value ? <pre>{JSON.stringify(value, null, 2)}</pre> : <p className="muted-line">{emptyText}</p>}
     </div>
   );
 }
 
-function TripPlanView({ tripPlan }: { tripPlan: TripPlan }) {
+function PlanView({ plan }: { plan: JsonObject }) {
+  const title = readString(plan.title) ?? readString(plan.trip_title);
+  const summary = readString(plan.summary);
+  const destination = readString(plan.destination);
+  const days = readNumber(plan.days) ?? readNumber(plan.duration_days);
+  const dailyPlan = readStringArray(plan.daily_plan);
+  const legacyDays = Array.isArray(plan.days) ? plan.days : [];
+  const tips = readStringArray(plan.tips);
+  const warnings = readStringArray(plan.warnings);
+
   return (
     <div className="trip-plan">
-      <div className="result-block">
-        <p className="subtle-tag">TripPlan</p>
-        <h3>{tripPlan.trip_title}</h3>
-        <p>{tripPlan.summary}</p>
+      {title ? <h3>{title}</h3> : null}
+      {destination || days ? (
         <div className="chip-row">
-          {tripPlan.travel_style.map((style) => (
-            <span key={style} className="chip chip-soft">
-              {style}
-            </span>
-          ))}
+          {destination ? <span className="chip chip-soft">{destination}</span> : null}
+          {days ? <span className="chip chip-soft">{days} 天</span> : null}
         </div>
-      </div>
+      ) : null}
+      {summary ? <p>{summary}</p> : null}
 
-      <div className="result-block">
-        <h3>预算与住宿</h3>
-        <p>
-          总计：{tripPlan.budget.currency} {tripPlan.budget.estimated_total}
-        </p>
-        <p>
-          住宿：{tripPlan.budget.currency} {tripPlan.budget.hotel_total}
-          {tripPlan.budget.hotel_budget_per_night
-            ? ` · 目标每晚 ${tripPlan.budget.hotel_budget_per_night}`
-            : ""}
-        </p>
-        {tripPlan.budget.hotel_recommendations.length > 0 ? (
-          <div className="day-list">
-            {tripPlan.budget.hotel_recommendations.map((hotel) => (
-              <article key={`${hotel.name}-${hotel.area}`} className="day-card">
-                <div className="day-header">
-                  <div>
-                    <strong>{hotel.name}</strong>
-                    <p>{hotel.area}</p>
-                  </div>
-                  <span className="chip chip-soft">
-                    {tripPlan.budget.currency} {hotel.nightly_price}/晚
-                  </span>
-                </div>
-                {hotel.rating ? <p>评分：{hotel.rating}</p> : null}
-                {hotel.reason ? <p>{hotel.reason}</p> : null}
-                {hotel.booking_hint ? <p className="backup-line">提示：{hotel.booking_hint}</p> : null}
-              </article>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="result-block">
-        <h3>每日日程</h3>
-        <div className="day-list">
-          {tripPlan.days.map((day) => (
-            <article key={day.day} className="day-card">
-              <div className="day-header">
-                <div>
-                  <strong>Day {day.day}</strong>
-                  <p>{day.theme}</p>
-                </div>
-                <span className="chip chip-soft">
-                  {day.pace} · {tripPlan.budget.currency} {day.estimated_cost}
-                </span>
-              </div>
-              <ul className="plain-list">
-                {day.items.map((item) => (
-                  <li key={`${day.day}-${item.time}-${item.title}`}>
-                    <div>
-                      <strong>{item.time}</strong> {item.title}
-                      {item.location ? ` · ${item.location}` : ""}
-                    </div>
-                    {item.estimated_cost ? (
-                      <div>
-                        {_costLabel(item.type)}：{tripPlan.budget.currency} {item.estimated_cost}
-                      </div>
-                    ) : null}
-                    {item.notes ? <div>{item.notes}</div> : null}
-                    {item.transport_to_next ? (
-                      <div>
-                        前往下一站：{item.transport_to_next.mode} · {tripPlan.budget.currency}{" "}
-                        {item.transport_to_next.estimated_cost ?? 0}
-                        {item.transport_to_next.duration_minutes
-                          ? ` · ${item.transport_to_next.duration_minutes} 分钟`
-                          : ""}
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              {day.backup_plan ? <p className="backup-line">备选：{day.backup_plan}</p> : null}
-            </article>
-          ))}
-        </div>
-      </div>
-
-      <div className="result-block">
-        <h3>注意事项</h3>
+      {dailyPlan.length > 0 ? (
         <ul className="plain-list">
-          {tripPlan.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
+          {dailyPlan.map((item, index) => (
+            <li key={`${item}-${index}`}>{item}</li>
           ))}
         </ul>
-      </div>
+      ) : null}
+
+      {dailyPlan.length === 0 && legacyDays.length > 0 ? (
+        <div className="day-list">
+          {legacyDays.map((day, index) => (
+            <LegacyDayCard key={index} day={asObject(day)} index={index} />
+          ))}
+        </div>
+      ) : null}
+
+      {tips.length > 0 ? <StringList title="提示" items={tips} /> : null}
+      {warnings.length > 0 ? <StringList title="注意事项" items={warnings} /> : null}
     </div>
   );
 }
 
-function _costLabel(type: string) {
-  if (type === "attraction") {
-    return "门票/体验费";
+function LegacyDayCard({ day, index }: { day: JsonObject | null; index: number }) {
+  if (!day) {
+    return null;
   }
-  if (type === "food") {
-    return "餐饮预算";
+
+  const title = readString(day.theme) ?? `Day ${index + 1}`;
+  const items = Array.isArray(day.items) ? day.items : [];
+
+  return (
+    <article className="day-card">
+      <div className="day-header">
+        <strong>Day {readNumber(day.day) ?? index + 1}</strong>
+        <span>{title}</span>
+      </div>
+      {items.length > 0 ? (
+        <ul className="plain-list">
+          {items.map((rawItem, itemIndex) => {
+            const item = asObject(rawItem);
+            const itemTitle = readString(item?.title) ?? "未命名安排";
+            const time = readString(item?.time);
+            return (
+              <li key={`${itemTitle}-${itemIndex}`}>
+                {time ? `${time} ` : ""}
+                {itemTitle}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </article>
+  );
+}
+
+function StringList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <h4>{title}</h4>
+      <ul className="plain-list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function findBudgetSummary(plan: JsonObject | null): string | null {
+  if (!plan) {
+    return null;
   }
-  if (type === "rest") {
-    return "休息消费";
+  const direct = readString(plan.budget_summary);
+  if (direct) {
+    return direct;
   }
-  return "预计花费";
+  const budget = asObject(plan.budget);
+  const estimatedTotal = budget ? readNumber(budget.estimated_total) : null;
+  const currency = budget ? readString(budget.currency) ?? "CNY" : "CNY";
+  return estimatedTotal !== null ? `总预算估算：${currency} ${estimatedTotal}` : null;
+}
+
+function readErrorMessage(serverMessage: AnyServerMessage): string {
+  const payload = asObject(serverMessage.payload);
+  return serverMessage.message ?? readString(payload?.message) ?? "后端处理失败。";
+}
+
+function asObject(value: unknown): JsonObject | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : null;
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === "number" ? value : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function readConversation(value: unknown): ConversationMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    const entry = asObject(item);
+    const role = readString(entry?.role);
+    const content = readString(entry?.content);
+    if ((role === "user" || role === "assistant") && content) {
+      return [{ role, content }];
+    }
+    return [];
+  });
 }
 
 function createSessionId() {
   return `trip_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
-}
-
-function submitLabel(hasTripPlan: boolean, needsClarification: boolean) {
-  if (needsClarification) {
-    return "补充信息并继续";
-  }
-  if (hasTripPlan) {
-    return "发送追问并改计划";
-  }
-  return "生成行程";
 }
 
 function connectionStatusLabel(status: ConnectionStatus) {

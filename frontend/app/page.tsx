@@ -1,5 +1,5 @@
-import { TripPlanner } from "../components/trip-planner";
+import { TravelChatApp } from "../components/trip-planner";
 
 export default function Home() {
-  return <TripPlanner />;
+  return <TravelChatApp />;
 }

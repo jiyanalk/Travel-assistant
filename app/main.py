@@ -12,7 +12,7 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Travel Planning Agent MVP powered by FastAPI and LangGraph.",
+    description="Lightweight Travel Assistant powered by FastAPI WebSocket.",
 )
 
 app.add_middleware(

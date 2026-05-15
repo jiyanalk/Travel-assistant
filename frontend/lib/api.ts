@@ -1,90 +1,34 @@
-export type TransportInfo = {
-  mode: string;
-  duration_minutes?: number | null;
-  distance_km?: number | null;
-  estimated_cost?: number | null;
-  description?: string | null;
-  is_estimated: boolean;
-};
-
-export type TripItem = {
-  time: string;
-  type: string;
-  title: string;
-  location?: string | null;
-  duration_minutes?: number | null;
-  estimated_cost?: number | null;
-  is_cost_estimated?: boolean;
-  reason?: string | null;
-  notes?: string | null;
-  transport_to_next?: TransportInfo | null;
-};
-
-export type DayPlan = {
-  day: number;
-  date?: string | null;
-  theme: string;
-  pace: string;
-  items: TripItem[];
-  estimated_cost: number;
-  transport_summary?: string | null;
-  backup_plan?: string | null;
-};
-
-export type TripBudget = {
-  currency: string;
-  user_budget?: number | null;
-  hotel_budget_per_night?: number | null;
-  estimated_total: number;
-  hotel_total: number;
-  status: string;
-  hotel_recommendations: Array<{
-    name: string;
-    area: string;
-    nightly_price: number;
-    rating?: number | null;
-    reason?: string | null;
-    booking_hint?: string | null;
-    is_estimated: boolean;
-    source: string;
-  }>;
-  is_estimated: boolean;
-};
-
-export type TripPlan = {
-  trip_title: string;
-  destination: string;
-  duration_days: number;
-  travel_style: string[];
-  summary: string;
-  days: DayPlan[];
-  budget: TripBudget;
-  backup_plans: string[];
-  warnings: string[];
-  sources: string[];
-};
-
-export type TripRequestSnapshot = {
+export interface LightTripRequest {
   origin?: string | null;
   destination?: string | null;
-  start_date?: string | null;
-  end_date?: string | null;
-  duration_days?: number | null;
-  hotel_budget_per_night?: number | null;
+  days?: number | null;
+  people?: number;
+  budget?: number | null;
   interests: string[];
-  pace: string;
-  special_requirements: string[];
-};
+  travel_style?: string | null;
+  constraints: string[];
+}
 
-export type TripPlanResponse = {
-  trip_id?: string | null;
-  thread_id?: string | null;
-  need_clarification: boolean;
-  clarification_question?: string | null;
-  trip_request?: TripRequestSnapshot | null;
-  trip_plan?: TripPlan | null;
-  agent_steps: string[];
-};
+export interface LightTripPlan {
+  destination?: string | null;
+  days?: number | null;
+  summary: string;
+  daily_plan: string[];
+  budget_summary?: string | null;
+  tips: string[];
+}
+
+export interface LightAssistantMessage {
+  type: "assistant_message";
+  session_id: string;
+  message: string;
+  request?: LightTripRequest | null;
+  plan?: LightTripPlan | null;
+  metadata: {
+    intent?: string;
+    used_tools?: string[];
+  };
+}
 
 export type ConversationMessage = {
   role: "user" | "assistant";
@@ -93,27 +37,23 @@ export type ConversationMessage = {
 
 export type WSSessionSnapshot = {
   session_id: string;
-  thread_id?: string | null;
-  trip_id?: string | null;
   user_id?: string | null;
-  awaiting_clarification: boolean;
-  latest_trip_plan?: TripPlan | null;
-  last_plan_response?: TripPlanResponse | null;
+  latest_request?: LightTripRequest | null;
+  latest_plan?: LightTripPlan | null;
   message_history: ConversationMessage[];
+  preference_memory?: Record<string, unknown>;
+  light_latest_request?: LightTripRequest | null;
+  light_latest_plan?: LightTripPlan | null;
+  light_message_history?: ConversationMessage[];
+  light_preference_memory?: Record<string, unknown>;
 };
 
-export type WSServerMessage = {
-  type:
-    | "connected"
-    | "snapshot"
-    | "step_start"
-    | "plan_result"
-    | "plan_revised"
-    | "assistant_message"
-    | "error"
-    | "pong";
-  payload?: unknown;
-};
+export type WSServerMessage =
+  | LightAssistantMessage
+  | { type: "connected"; payload?: WSSessionSnapshot }
+  | { type: "snapshot"; payload?: WSSessionSnapshot }
+  | { type: "error"; payload?: { message?: string }; message?: string }
+  | { type: "pong"; payload?: { session_id?: string } };
 
 export type WSClientMessage =
   | { type: "user_message"; message: string; user_id?: string | null }

@@ -4,8 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from schemas.api import TripPlanResponse
-from schemas.trip_plan import TripPlan
+from schemas.light_trip import LightTripPlan, LightTripRequest
 
 
 class WSClientMessage(BaseModel):
@@ -16,13 +15,11 @@ class WSClientMessage(BaseModel):
 
 class WSSessionSnapshot(BaseModel):
     session_id: str
-    thread_id: str | None = None
-    trip_id: str | None = None
     user_id: str | None = None
-    awaiting_clarification: bool = False
-    latest_trip_plan: TripPlan | None = None
-    last_plan_response: TripPlanResponse | None = None
-    message_history: list[dict[str, str]] = Field(default_factory=list)
+    latest_request: LightTripRequest | None = None
+    latest_plan: LightTripPlan | None = None
+    message_history: list[dict[str, Any]] = Field(default_factory=list)
+    preference_memory: dict[str, Any] = Field(default_factory=dict)
 
 
 class WSServerMessage(BaseModel):

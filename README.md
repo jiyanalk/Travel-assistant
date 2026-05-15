@@ -1,24 +1,21 @@
 # Travel Assistant
 
-基于 `LangGraph + LangChain + 智谱 GLM + FastAPI WebSocket` 的旅行规划 Agent MVP，可直接启动后端并与前端联调。
+Travel Assistant 是一个轻量化旅游对话助手，使用 `FastAPI WebSocket + Zhipu GLM + Next.js` 构建。
 
-## 目录说明
+## 项目定位
 
-- `app/`: FastAPI 入口、配置和依赖注入
-- `api/routes/`: WebSocket 行程会话和用户接口
-- `agents/`: Agent 封装层
-- `graphs/`: LangGraph 状态机、节点和流程编排
-- `services/`: 规则版解析、预算、RAG、Memory、行程生成服务
-- `tools/`: 可对接 LangChain Tool 的函数包装
-- `schemas/`: Pydantic 数据结构
-- `repositories/`、`db/`: SQLite / SQLAlchemy 持久化骨架
-- `data/`: 样例 POI、攻略和本地 memory 文件
-- `prompts/`: 后续接 LLM 可直接扩展的 Prompt 模板
-- `frontend/`: Next.js 最小前端展示骨架
+当前项目只使用 `LightTravelChatAgent` 作为主链路，面向自然语言旅游对话，而不是重型攻略检索或复杂路线规划。
 
-## 快速开始
+核心能力：
 
-### 后端
+- WebSocket 实时对话
+- 结构化旅行需求抽取
+- 轻量行程草案生成
+- 简单预算估算
+- session 级上下文记忆
+- preference memory 用户长期偏好记忆
+
+## 后端启动
 
 ```bash
 python -m venv .venv
@@ -26,23 +23,16 @@ python -m venv .venv
 pip install -r requirements.txt
 pip install -r requirements.ai.txt
 copy .env.example .env
-uvicorn app.main:app --reload
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-启动后可访问：
+可用接口：
 
-- `http://localhost:8000/health`
-- `http://localhost:8000/docs`
+- `GET http://127.0.0.1:8000/health`
+- `GET http://127.0.0.1:8000/docs`
+- `WS ws://127.0.0.1:8000/ws/trips/{session_id}`
 
-如果你只是先把本地后端跑起来并联调前端，安装 `requirements.txt` 就够了。
-接入智谱 GLM、LangChain 和向量检索时，再额外安装 `requirements.ai.txt`。
-
-当前已经就绪的联调接口：
-
-- `WS /ws/trips/{session_id}`
-- `GET /health`
-
-### 前端
+## 前端启动
 
 ```bash
 cd frontend
@@ -50,23 +40,45 @@ npm install
 npm run dev
 ```
 
-如果需要显式指定后端地址：
+前端默认连接：
 
-```bash
-copy .env.local.example .env.local
-npm run dev
+```text
+ws://localhost:8000/ws/trips/{session_id}
 ```
 
-默认前端会请求 `http://localhost:8000`。
-WebSocket 默认会连接 `ws://localhost:8000/ws/trips/{session_id}`。
+## 测试
 
-## 当前实现说明
+后端测试：
 
-- 旅行需求解析为本地规则版，便于先跑通框架
-- 攻略检索使用本地 Markdown 文本片段
-- 预算、路线和行程校验使用规则估算
-- `services/llm_service.py` 已预留智谱兼容接入点
-- `requirements.txt` 为可启动的核心运行依赖，`requirements.ai.txt` 为后续 AI 扩展依赖
-- 缺失信息追问、后续追问和行程修改统一承载在 WebSocket 会话里
-- 前端页面已切换为长连接模式，可实时看到节点推进和模型结果
-- 后续可逐步替换为真实 GLM 调用、向量检索和地图 API
+```bash
+.\.venv\Scripts\python.exe -B -m pytest -q
+```
+
+前端构建：
+
+```bash
+cd frontend
+npm run build
+```
+
+端到端检查：
+
+```bash
+.\.venv\Scripts\python.exe scripts\e2e_light_agent_check.py
+```
+
+## 示例输入
+
+```text
+我想去成都玩三天，两个人，预算3000，喜欢美食和city walk
+我还没想好去哪，想找一个适合周末放松的地方
+把刚才的计划改得轻松一点，不要太赶
+预算大概1500，两个人，两天，可以怎么玩
+我喜欢美食和夜景，下次也记住这个偏好
+```
+
+e2e 成功输出：
+
+```text
+PASS: 轻量 Agent WebSocket 端到端检查通过。
+```

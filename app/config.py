@@ -36,7 +36,6 @@ class Settings(BaseSettings):
     )
     default_currency: str = "CNY"
 
-
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()

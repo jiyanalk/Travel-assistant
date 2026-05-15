@@ -5,8 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import ROOT_DIR
-from schemas.api import TripPlanResponse
-from schemas.trip_plan import TripPlan
+from schemas.light_trip import LightTripPlan, LightTripRequest
 
 
 SESSION_STORE_PATH = ROOT_DIR / "data" / "ws_sessions.json"
@@ -16,12 +15,10 @@ SESSION_STORE_PATH = ROOT_DIR / "data" / "ws_sessions.json"
 class SessionState:
     session_id: str
     user_id: str = "guest"
-    thread_id: str | None = None
-    trip_id: str | None = None
-    awaiting_clarification: bool = False
-    latest_trip_plan: TripPlan | None = None
-    last_plan_response: TripPlanResponse | None = None
-    message_history: list[dict[str, str]] = field(default_factory=list)
+    light_latest_request: LightTripRequest | None = None
+    light_latest_plan: LightTripPlan | None = None
+    light_message_history: list[dict[str, str]] = field(default_factory=list)
+    light_preference_memory: dict[str, Any] = field(default_factory=dict)
 
 
 class WSSessionManager:
@@ -38,50 +35,86 @@ class WSSessionManager:
 
         if user_id:
             session.user_id = user_id
+            self._persist()
         return session
 
-    def update_plan_response(self, session: SessionState, response: TripPlanResponse) -> None:
-        session.thread_id = response.thread_id
-        session.trip_id = response.trip_id
-        session.awaiting_clarification = response.need_clarification
-        session.last_plan_response = response
-        if response.trip_plan is not None:
-            session.latest_trip_plan = response.trip_plan
-        self._persist()
-
-    def append_user_message(self, session: SessionState, message: str) -> None:
-        session.message_history.append({"role": "user", "content": message})
-        self._persist()
-
-    def append_assistant_message(self, session: SessionState, message: str) -> None:
-        session.message_history.append({"role": "assistant", "content": message})
-        self._persist()
-
-    def update_revised_plan(
-        self,
-        session: SessionState,
-        updated_plan: TripPlan,
-    ) -> None:
-        session.latest_trip_plan = updated_plan
-        session.awaiting_clarification = False
-        if session.last_plan_response is not None:
-            session.last_plan_response.trip_plan = updated_plan
-        self._persist()
-
-    def to_snapshot(self, session: SessionState) -> dict[str, Any]:
+    def get_light_state(self, session_id: str) -> dict[str, Any]:
+        session = self.get_or_create(session_id)
         return {
             "session_id": session.session_id,
-            "thread_id": session.thread_id,
-            "trip_id": session.trip_id,
+            "light_latest_request": session.light_latest_request.model_dump(mode="json")
+            if session.light_latest_request
+            else None,
+            "light_latest_plan": session.light_latest_plan.model_dump(mode="json")
+            if session.light_latest_plan
+            else None,
+            "light_message_history": list(session.light_message_history),
+            "light_preference_memory": dict(session.light_preference_memory),
+        }
+
+    def update_light_request(
+        self,
+        session_id: str,
+        request: LightTripRequest | dict[str, Any] | None,
+    ) -> None:
+        session = self.get_or_create(session_id)
+        session.light_latest_request = (
+            LightTripRequest.model_validate(request)
+            if request is not None
+            else None
+        )
+        self._persist()
+
+    def update_light_plan(
+        self,
+        session_id: str,
+        plan: LightTripPlan | dict[str, Any] | None,
+    ) -> None:
+        session = self.get_or_create(session_id)
+        session.light_latest_plan = (
+            LightTripPlan.model_validate(plan)
+            if plan is not None
+            else None
+        )
+        self._persist()
+
+    def append_light_message(self, session_id: str, role: str, content: str) -> None:
+        session = self.get_or_create(session_id)
+        session.light_message_history.append({"role": role, "content": content})
+        self._persist()
+
+    def get_light_message_history(self, session_id: str, limit: int = 10) -> list[dict[str, str]]:
+        session = self.get_or_create(session_id)
+        if limit <= 0:
+            return []
+        return session.light_message_history[-limit:]
+
+    def to_snapshot(self, session: SessionState) -> dict[str, Any]:
+        latest_request = (
+            session.light_latest_request.model_dump(mode="json")
+            if session.light_latest_request
+            else None
+        )
+        latest_plan = (
+            session.light_latest_plan.model_dump(mode="json")
+            if session.light_latest_plan
+            else None
+        )
+        message_history = list(session.light_message_history)
+        preference_memory = dict(session.light_preference_memory)
+
+        return {
+            "session_id": session.session_id,
             "user_id": session.user_id,
-            "awaiting_clarification": session.awaiting_clarification,
-            "latest_trip_plan": session.latest_trip_plan.model_dump(mode="json")
-            if session.latest_trip_plan
-            else None,
-            "last_plan_response": session.last_plan_response.model_dump(mode="json")
-            if session.last_plan_response
-            else None,
-            "message_history": session.message_history,
+            "latest_request": latest_request,
+            "latest_plan": latest_plan,
+            "message_history": message_history,
+            "preference_memory": preference_memory,
+            # Temporary aliases for already-open frontend tabs during this transition.
+            "light_latest_request": latest_request,
+            "light_latest_plan": latest_plan,
+            "light_message_history": message_history,
+            "light_preference_memory": preference_memory,
         }
 
     def _load_sessions(self) -> dict[str, SessionState]:
@@ -94,44 +127,32 @@ class WSSessionManager:
 
         sessions: dict[str, SessionState] = {}
         for session_id, payload in raw.items():
-            last_plan_response = (
-                TripPlanResponse.model_validate(payload["last_plan_response"])
-                if payload.get("last_plan_response")
-                else None
-            )
-            latest_trip_plan = (
-                TripPlan.model_validate(payload["latest_trip_plan"])
-                if payload.get("latest_trip_plan")
-                else None
-            )
+            latest_request_payload = payload.get("light_latest_request") or payload.get("latest_request")
+            latest_plan_payload = payload.get("light_latest_plan") or payload.get("latest_plan")
             sessions[session_id] = SessionState(
                 session_id=session_id,
                 user_id=payload.get("user_id", "guest"),
-                thread_id=payload.get("thread_id"),
-                trip_id=payload.get("trip_id"),
-                awaiting_clarification=payload.get("awaiting_clarification", False),
-                latest_trip_plan=latest_trip_plan,
-                last_plan_response=last_plan_response,
-                message_history=payload.get("message_history", []),
+                light_latest_request=(
+                    LightTripRequest.model_validate(latest_request_payload)
+                    if latest_request_payload
+                    else None
+                ),
+                light_latest_plan=(
+                    LightTripPlan.model_validate(latest_plan_payload)
+                    if latest_plan_payload
+                    else None
+                ),
+                light_message_history=payload.get("light_message_history")
+                or payload.get("message_history", []),
+                light_preference_memory=payload.get("light_preference_memory")
+                or payload.get("preference_memory", {}),
             )
         return sessions
 
     def _persist(self) -> None:
         SESSION_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            session_id: {
-                "user_id": session.user_id,
-                "thread_id": session.thread_id,
-                "trip_id": session.trip_id,
-                "awaiting_clarification": session.awaiting_clarification,
-                "latest_trip_plan": session.latest_trip_plan.model_dump(mode="json")
-                if session.latest_trip_plan
-                else None,
-                "last_plan_response": session.last_plan_response.model_dump(mode="json")
-                if session.last_plan_response
-                else None,
-                "message_history": session.message_history,
-            }
+            session_id: self.to_snapshot(session)
             for session_id, session in self._sessions.items()
         }
         try:

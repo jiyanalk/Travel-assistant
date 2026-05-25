@@ -13,6 +13,7 @@ import websockets
 
 DEFAULT_MESSAGE = "我想去成都玩三天，两个人，预算3000，喜欢美食和city walk"
 VALID_INTENTS = {"draft_plan", "collect_info", "chat", "budget_estimate", "revise_plan"}
+FALLBACK_MESSAGE = "我刚刚理解得不够稳定，可以请你换个方式描述一下你的旅行需求吗？"
 
 
 async def run_check(base_url: str, timeout_seconds: float) -> tuple[bool, str]:
@@ -64,6 +65,7 @@ def _validate_assistant_message(response: dict[str, Any]) -> tuple[bool, str]:
     checks = {
         'type == "assistant_message"': response.get("type") == "assistant_message",
         "message 不为空": bool(response.get("message")),
+        "message 不是 fallback": response.get("message") != FALLBACK_MESSAGE,
         'request.destination == "成都"': _read_path(response, "request", "destination") == "成都",
         "request.days == 3": _read_path(response, "request", "days") == 3,
         "request.people == 2": _read_path(response, "request", "people") == 2,

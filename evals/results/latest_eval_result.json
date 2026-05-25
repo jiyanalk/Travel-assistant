@@ -1,0 +1,550 @@
+{
+  "mode": "mock",
+  "metrics": {
+    "total_cases": 12,
+    "passed_cases": 12,
+    "pass_rate": 1.0,
+    "json_valid_rate": 1.0,
+    "field_extraction_accuracy": 1.0,
+    "tool_or_skill_match_rate": 1.0,
+    "memory_update_accuracy": 1.0,
+    "rag_hit_rate": 1.0,
+    "hallucination_guard_pass_rate": 1.0,
+    "fallback_success_rate": 1.0
+  },
+  "cases": [
+    {
+      "id": "case_001",
+      "name": "extract_complete_trip_request",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "people": true,
+        "budget": true,
+        "interests_contains": true,
+        "intent": true,
+        "tools": true,
+        "rag_hit": true,
+        "plan_exists": true,
+        "hallucination_guard": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "draft_plan",
+        "assistant_message": "成都三天轻量行程草案来了，重点安排美食和city walk。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 2,
+          "budget": 3000.0,
+          "interests": [
+            "美食",
+            "city walk"
+          ],
+          "travel_style": null,
+          "constraints": []
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "成都三天美食和city walk轻量草案。",
+          "daily_plan": [
+            "Day 1: 市区街区和美食",
+            "Day 2: 老城city walk",
+            "Day 3: 轻松返程"
+          ],
+          "budget_summary": "总预算约 3000 元，人均约 1500 元，人均每天约 500 元，属于舒适型。",
+          "tips": [
+            "不要安排过满"
+          ]
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "rag_context_skill",
+          "budget_skill",
+          "trip_request_merge_tool",
+          "trip_quality_check_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_002",
+      "name": "clarify_missing_destination",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "intent": true,
+        "missing_fields": true,
+        "assistant_contains": true,
+        "hallucination_guard": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "collect_info",
+        "assistant_message": "可以的。你想去哪个城市或大概什么类型的目的地？",
+        "updated_request": {
+          "origin": null,
+          "destination": null,
+          "days": 2,
+          "people": 1,
+          "budget": null,
+          "interests": [
+            "慢节奏"
+          ],
+          "travel_style": null,
+          "constraints": [
+            "不想太赶"
+          ]
+        },
+        "updated_plan": null,
+        "missing_fields": [
+          "destination"
+        ],
+        "used_tools": [
+          "rag_context_tool",
+          "trip_request_merge_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_003",
+      "name": "multiturn_request_merge",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "people": true,
+        "budget": true,
+        "interests_contains": true,
+        "intent": true,
+        "tools": true,
+        "plan_exists": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "draft_plan",
+        "assistant_message": "已补全信息，我给你一个三天成都轻量草案。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 2,
+          "budget": 3000.0,
+          "interests": [
+            "美食"
+          ],
+          "travel_style": null,
+          "constraints": []
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "成都三天轻量草案。",
+          "daily_plan": [
+            "Day 1: 抵达和美食",
+            "Day 2: 城市漫步",
+            "Day 3: 轻松返程"
+          ],
+          "budget_summary": "总预算约 3000 元，人均约 1500 元，人均每天约 500 元，属于舒适型。",
+          "tips": []
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "rag_context_skill",
+          "budget_skill",
+          "trip_request_merge_tool",
+          "trip_quality_check_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_004",
+      "name": "city_alias_rongcheng_to_chengdu",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "people": true,
+        "budget": true,
+        "tools": true,
+        "rag_hit": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "draft_plan",
+        "assistant_message": "蓉城适合慢慢玩，我先给你一版轻量草案。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 2,
+          "budget": 3000.0,
+          "interests": [],
+          "travel_style": null,
+          "constraints": []
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "成都三天轻量草案。",
+          "daily_plan": [
+            "Day 1",
+            "Day 2",
+            "Day 3"
+          ],
+          "budget_summary": "总预算约 3000 元，人均约 1500 元，人均每天约 500 元，属于舒适型。",
+          "tips": []
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "rag_context_skill",
+          "budget_skill",
+          "city_alias_tool",
+          "trip_request_merge_tool",
+          "trip_quality_check_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_005",
+      "name": "revise_plan_relaxed",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "intent": true,
+        "tools": true,
+        "plan_exists": true,
+        "plan_summary": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "revise_plan",
+        "assistant_message": "我会把节奏放慢，减少跨区域移动。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 2,
+          "budget": 3000.0,
+          "interests": [],
+          "travel_style": null,
+          "constraints": [
+            "不要太赶"
+          ]
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "成都三天轻松版计划。",
+          "daily_plan": [
+            "Day 1: 市区慢逛",
+            "Day 2: 茶馆和街区",
+            "Day 3: 轻松返程"
+          ],
+          "budget_summary": "总预算约 3000 元，人均约 1500 元，人均每天约 500 元，属于舒适型。",
+          "tips": [
+            "每天只保留一个主主题"
+          ]
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "rag_context_skill",
+          "plan_revision_skill",
+          "budget_skill",
+          "simple_budget_tool",
+          "trip_quality_check_tool",
+          "trip_request_merge_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_006",
+      "name": "budget_skill_called",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "people": true,
+        "budget": true,
+        "intent": true,
+        "tools": true,
+        "plan_exists": true,
+        "budget_summary": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "budget_estimate",
+        "assistant_message": "我先按总预算做一个粗略估算。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 2,
+          "budget": 3000.0,
+          "interests": [],
+          "travel_style": null,
+          "constraints": []
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "成都三天预算友好草案。",
+          "daily_plan": [
+            "Day 1",
+            "Day 2",
+            "Day 3"
+          ],
+          "budget_summary": "总预算约 3000 元，人均约 1500 元，人均每天约 500 元，属于舒适型。",
+          "tips": []
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "rag_context_skill",
+          "budget_skill",
+          "trip_request_merge_tool",
+          "trip_quality_check_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_007",
+      "name": "remember_food_night_view_preferences",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "intent": true,
+        "tools": true,
+        "hallucination_guard": true,
+        "memory_update": true,
+        "memory_contains": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "chat",
+        "assistant_message": "我会记住：你偏好美食、夜景，也不喜欢太赶。",
+        "updated_request": null,
+        "updated_plan": null,
+        "missing_fields": [],
+        "used_tools": [
+          "preference_memory_skill",
+          "preference_extractor_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_008",
+      "name": "do_not_store_one_off_budget",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "people": true,
+        "budget": true,
+        "plan_exists": true,
+        "memory_update": true,
+        "memory_not_polluted": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "draft_plan",
+        "assistant_message": "好的，这是本次成都三天轻量草案。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 2,
+          "budget": 3000.0,
+          "interests": [],
+          "travel_style": null,
+          "constraints": []
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "成都三天轻量草案。",
+          "daily_plan": [
+            "Day 1",
+            "Day 2",
+            "Day 3"
+          ],
+          "budget_summary": "总预算约 3000 元，人均约 1500 元，人均每天约 500 元，属于舒适型。",
+          "tips": []
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "rag_context_skill",
+          "budget_skill",
+          "trip_request_merge_tool",
+          "trip_quality_check_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_009",
+      "name": "rag_hit_chengdu_food_city_walk",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "interests_contains": true,
+        "tools": true,
+        "rag_hit": true,
+        "plan_exists": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "draft_plan",
+        "assistant_message": "成都适合美食和city walk，我给你一版轻量草案。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 1,
+          "budget": null,
+          "interests": [
+            "美食",
+            "city walk"
+          ],
+          "travel_style": null,
+          "constraints": []
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "成都美食和city walk草案。",
+          "daily_plan": [
+            "Day 1",
+            "Day 2",
+            "Day 3"
+          ],
+          "budget_summary": null,
+          "tips": []
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "rag_context_skill",
+          "trip_request_merge_tool",
+          "trip_quality_check_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_010",
+      "name": "hallucination_guard_no_realtime_prices",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "intent": true,
+        "assistant_contains": true,
+        "hallucination_guard": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "collect_info",
+        "assistant_message": "我可以给你住宿区域建议，但不能提供实时酒店价格或准确营业时间；这些需要以平台实时信息为准。",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": null,
+          "people": 1,
+          "budget": null,
+          "interests": [],
+          "travel_style": null,
+          "constraints": [
+            "住宿区域建议"
+          ]
+        },
+        "updated_plan": null,
+        "missing_fields": [
+          "days"
+        ],
+        "used_tools": [
+          "rag_context_skill",
+          "trip_request_merge_tool"
+        ]
+      }
+    },
+    {
+      "id": "case_011",
+      "name": "fallback_on_invalid_model_output",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "intent": true,
+        "hallucination_guard": true,
+        "fallback": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "chat",
+        "assistant_message": "我刚刚理解得不够稳定，可以请你换个方式描述一下你的旅行需求吗？",
+        "updated_request": null,
+        "updated_plan": null,
+        "missing_fields": [],
+        "used_tools": []
+      }
+    },
+    {
+      "id": "case_012",
+      "name": "mixed_english_chengdu_food_trip",
+      "passed": true,
+      "checks": {
+        "json_valid": true,
+        "destination": true,
+        "days": true,
+        "people": true,
+        "budget": true,
+        "interests_contains": true,
+        "intent": true,
+        "tools": true,
+        "plan_exists": true
+      },
+      "errors": [],
+      "result": {
+        "intent": "draft_plan",
+        "assistant_message": "Here is a lightweight Chengdu food trip draft.",
+        "updated_request": {
+          "origin": null,
+          "destination": "成都",
+          "days": 3,
+          "people": 2,
+          "budget": 3000.0,
+          "interests": [
+            "美食"
+          ],
+          "travel_style": null,
+          "constraints": []
+        },
+        "updated_plan": {
+          "destination": "成都",
+          "days": 3,
+          "summary": "Chengdu 3-day food-focused lightweight draft.",
+          "daily_plan": [
+            "Day 1: arrival and food",
+            "Day 2: city walk",
+            "Day 3: relaxed return"
+          ],
+          "budget_summary": "总预算约 3000 元，人均约 1500 元，人均每天约 500 元，属于舒适型。",
+          "tips": []
+        },
+        "missing_fields": [],
+        "used_tools": [
+          "budget_skill",
+          "trip_request_merge_tool",
+          "trip_quality_check_tool"
+        ]
+      }
+    }
+  ]
+}

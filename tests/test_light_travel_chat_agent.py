@@ -1,16 +1,23 @@
 import asyncio
 
+from agents import light_agent_harness as harness_module
 from agents import light_travel_chat_agent as agent_module
 from agents.light_travel_chat_agent import FALLBACK_MESSAGE, LightTravelChatAgent
 from schemas.light_trip import ChatAgentResult, LightTripPlan, LightTripRequest
 from services import ws_session_manager as ws_module
+from services.agent_observer import AgentObserver
 from services.ws_session_manager import WSSessionManager
 
 
-def test_light_travel_chat_agent_updates_session_and_uses_budget_tool(monkeypatch, tmp_path):
+def test_light_travel_chat_agent_updates_session_and_uses_harness_tools(monkeypatch, tmp_path):
     monkeypatch.setattr(ws_module, "SESSION_STORE_PATH", tmp_path / "ws_sessions.json")
     manager = WSSessionManager()
     monkeypatch.setattr(agent_module, "ws_session_manager", manager)
+    monkeypatch.setattr(
+        harness_module,
+        "agent_observer",
+        AgentObserver(trace_path=tmp_path / "agent_traces.jsonl"),
+    )
     calls = {"count": 0}
 
     def fake_chat_completion(**kwargs):
@@ -34,7 +41,7 @@ def test_light_travel_chat_agent_updates_session_and_uses_budget_tool(monkeypatc
             ),
         ).model_dump_json()
 
-    monkeypatch.setattr(agent_module.llm_service, "chat_completion", fake_chat_completion)
+    monkeypatch.setattr(harness_module.llm_service, "chat_completion", fake_chat_completion)
 
     result = asyncio.run(
         LightTravelChatAgent().chat(
@@ -50,23 +57,31 @@ def test_light_travel_chat_agent_updates_session_and_uses_budget_tool(monkeypatc
     assert result.updated_plan is not None
     assert result.updated_plan.budget_summary is not None
     assert "3600" in result.updated_plan.budget_summary
-    assert result.used_tools == ["simple_budget_tool"]
+    assert "budget_skill" in result.used_tools
+    assert "trip_quality_check_tool" in result.used_tools
+    assert "trip_request_merge_tool" in result.used_tools
     assert state["light_latest_request"]["destination"] == "Beijing"
     assert state["light_latest_plan"]["budget_summary"] == result.updated_plan.budget_summary
     assert [message["role"] for message in state["light_message_history"]] == ["user", "assistant"]
+    assert (tmp_path / "agent_traces.jsonl").exists()
 
 
 def test_light_travel_chat_agent_returns_fallback_for_invalid_json(monkeypatch, tmp_path):
     monkeypatch.setattr(ws_module, "SESSION_STORE_PATH", tmp_path / "ws_sessions.json")
     manager = WSSessionManager()
     monkeypatch.setattr(agent_module, "ws_session_manager", manager)
+    monkeypatch.setattr(
+        harness_module,
+        "agent_observer",
+        AgentObserver(trace_path=tmp_path / "agent_traces.jsonl"),
+    )
     calls = {"count": 0}
 
     def fake_chat_completion(**kwargs):
         calls["count"] += 1
         return "not json"
 
-    monkeypatch.setattr(agent_module.llm_service, "chat_completion", fake_chat_completion)
+    monkeypatch.setattr(harness_module.llm_service, "chat_completion", fake_chat_completion)
 
     result = asyncio.run(
         LightTravelChatAgent().chat(

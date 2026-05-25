@@ -7,8 +7,10 @@ travel_agent.db
 .env
 *.log
 data/pending_threads.json
+data/agent_traces.jsonl
 data/user_memory.json
 data/ws_sessions.json
+evals/results/eval_user_memory.json
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local

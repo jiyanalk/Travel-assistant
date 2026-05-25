@@ -6,13 +6,16 @@ from pydantic import BaseModel, Field
 
 
 class LightTripRequest(BaseModel):
-    origin: str | None = Field(default=None, description="出发地，可为空。")
-    destination: str | None = Field(default=None, description="目的地，可为空。")
-    days: int | None = Field(default=None, description="旅行天数，可为空。")
+    origin: str | None = Field(default=None, description="出发地，可以为空。")
+    destination: str | None = Field(default=None, description="目的地，可以为空。")
+    days: int | None = Field(default=None, description="旅行天数，可以为空。")
     people: int = Field(default=1, description="出行人数，默认为 1 人。")
-    budget: float | None = Field(default=None, description="总预算，单位默认按人民币估算。")
+    budget: float | None = Field(default=None, description="总预算，默认按人民币估算。")
     interests: list[str] = Field(default_factory=list, description="用户感兴趣的旅行主题。")
-    travel_style: str | None = Field(default=None, description="旅行风格，例如轻松、亲子、美食、拍照。")
+    travel_style: str | None = Field(
+        default=None,
+        description="旅行风格，例如轻松、亲子、美食、拍照。",
+    )
     constraints: list[str] = Field(default_factory=list, description="用户限制或特殊要求。")
 
 

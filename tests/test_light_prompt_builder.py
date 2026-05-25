@@ -14,6 +14,7 @@ def test_light_prompt_builder_contains_key_constraints():
             daily_plan=["先确认天数后再细化。"],
         ),
         preference_memory={"travel_style": "轻松"},
+        tool_context={"simple_budget_tool": {"available": False}},
     )
 
     assert isinstance(messages, list)
@@ -30,7 +31,39 @@ def test_light_prompt_builder_contains_key_constraints():
     assert "不编造营业时间" in combined_prompt
     assert "不编造门票价格" in combined_prompt
     assert "不编造实时交通信息" in combined_prompt
+    assert "工具上下文只能作为参考信息" in combined_prompt
     assert "我想去北京玩" in combined_prompt
     assert "latest_request" in combined_prompt
     assert "latest_plan" in combined_prompt
     assert "preference_memory" in combined_prompt
+    assert "tool_context" in combined_prompt
+
+
+def test_light_prompt_builder_includes_rag_context_constraints():
+    messages = build_light_travel_prompt(
+        user_message="我想去成都玩三天，喜欢美食和city walk",
+        message_history=[],
+        latest_request=LightTripRequest(destination="成都", interests=["美食"]),
+        latest_plan=None,
+        preference_memory={},
+        tool_context={
+            "rag_context": {
+                "available": True,
+                "summary": "已检索到成都相关轻量城市知识。",
+                "contexts": [
+                    {
+                        "city": "成都",
+                        "title": "兴趣关键词",
+                        "content": "- 美食\n- city walk",
+                        "score": 4.0,
+                    }
+                ],
+            }
+        },
+    )
+
+    combined_prompt = "\n".join(message["content"] for message in messages)
+    assert "rag_context" in combined_prompt
+    assert "可以参考本地城市知识" in combined_prompt
+    assert "不要逐字照抄" in combined_prompt
+    assert "不编造实时价格" in combined_prompt
